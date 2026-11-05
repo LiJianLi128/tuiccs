@@ -4,6 +4,7 @@
 //! into, and [`crate::cli::tui::app::App::on_mouse`] reads them back in the same
 //! event-loop iteration to translate a terminal mouse coordinate into a UI
 //! element. Everything is cleared at the start of each [`super::render`].
+//! (ci-trigger: no-op comment to re-run workflow validation)
 
 use ratatui::layout::Rect;
 
