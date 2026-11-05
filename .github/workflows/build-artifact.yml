@@ -1,0 +1,50 @@
+name: Build Artifact
+
+# Builds the cc-switch release binary and uploads it as a downloadable
+# artifact. Triggered manually (workflow_dispatch) or automatically on push
+# to main that touches src-tauri or this workflow file.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "src-tauri/**"
+      - ".github/workflows/build-artifact.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-artifact-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Build Windows release binary
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.91.1
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: build-artifact-windows
+
+      - name: Build release
+        working-directory: src-tauri
+        env:
+          RUSTFLAGS: "-C codegen-units=1"
+        run: cargo build --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cc-switch-windows-x86_64
+          path: src-tauri/target/release/cc-switch.exe
+          if-no-files-found: error
