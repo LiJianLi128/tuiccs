@@ -2787,7 +2787,7 @@ mod tests {
         let line = "abc";
         for col in 0..=2 {
             let byte = EditorState::byte_offset_for_subline_x(line, 3, 0, col);
-            assert_eq!(byte, col, "column {col} should map to byte {col}");
+            assert_eq!(byte, col as usize, "column {col} should map to byte {col}");
         }
         // Column past the line end clamps to the line end.
         assert_eq!(EditorState::byte_offset_for_subline_x(line, 3, 0, 9), 3);
