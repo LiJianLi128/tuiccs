@@ -392,7 +392,12 @@ impl EditorState {
             self.bounded_click_byte(line, width.saturating_sub(1), width)
         } else {
             let line_h = Self::wrapped_line_height(line, width);
-            Self::byte_offset_for_subline_x(line, width, line_h.saturating_sub(1), width.saturating_sub(1))
+            Self::byte_offset_for_subline_x(
+                line,
+                width,
+                line_h.saturating_sub(1),
+                width.saturating_sub(1),
+            )
         };
         (last, col)
     }

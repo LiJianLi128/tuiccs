@@ -660,7 +660,10 @@ fn render_provider_inline_fields(
     let offset = state.offset();
     for idx in offset..row_heights.len() {
         // Divider rows are decorative and not focusable.
-        if fields.get(idx).is_some_and(|field| provider_field_is_divider(*field)) {
+        if fields
+            .get(idx)
+            .is_some_and(|field| provider_field_is_divider(*field))
+        {
             continue;
         }
         if let Some(rect) = form_row_rect(table_area, offset, &row_heights, idx) {

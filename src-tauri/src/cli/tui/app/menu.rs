@@ -962,7 +962,10 @@ impl App {
         if self.editor.is_some() {
             let region = self.mouse_layout.borrow().editor_region;
             if let Some(region) = region {
-                if region.field_inner.contains(ratatui::layout::Position::new(column, row)) {
+                if region
+                    .field_inner
+                    .contains(ratatui::layout::Position::new(column, row))
+                {
                     let local_y = (row - region.field_inner.y) as usize;
                     let local_x = column - region.field_inner.x;
                     if let Some(editor) = self.editor.as_mut() {
@@ -1114,7 +1117,7 @@ impl App {
     }
 
     fn form_focus_field(&mut self, focus: crate::cli::tui::form::FormFocus, field_idx: usize) {
-        use crate::cli::tui::form::{FormState, provider_field_is_divider};
+        use crate::cli::tui::form::{provider_field_is_divider, FormState};
         self.form = self.form.take().map(|form| match form {
             FormState::ProviderAdd(mut f) => {
                 f.focus = focus;
