@@ -431,6 +431,40 @@ pub(crate) fn inline_row_height(error: Option<&str>, width: u16) -> u16 {
     })
 }
 
+/// The terminal rectangle a rendered form field row occupies, or `None` when
+/// the row is scrolled above the viewport or clipped by the table's bottom
+/// edge. Mirrors the `row_heights` accumulation in [`set_inline_table_cursor`]:
+/// the table's data rows start one row below the table top (the header) and
+/// each field spans `row_heights[idx]` terminal rows.
+pub(crate) fn form_row_rect(
+    table_area: ratatui::layout::Rect,
+    table_offset: usize,
+    row_heights: &[u16],
+    idx: usize,
+) -> Option<ratatui::layout::Rect> {
+    if idx < table_offset || idx >= row_heights.len() {
+        return None;
+    }
+    let rows_before = row_heights
+        .get(table_offset..idx)
+        .unwrap_or_default()
+        .iter()
+        .copied()
+        .sum::<u16>();
+    let y = table_area.y.saturating_add(1).saturating_add(rows_before);
+    let max_h = table_area.bottom().saturating_sub(y);
+    if max_h == 0 {
+        return None;
+    }
+    let height = row_heights[idx].max(1).min(max_h);
+    Some(ratatui::layout::Rect::new(
+        table_area.x,
+        y,
+        table_area.width,
+        height,
+    ))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn set_inline_table_cursor(
     frame: &mut Frame<'_>,

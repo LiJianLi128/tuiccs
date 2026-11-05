@@ -101,6 +101,7 @@ pub(crate) fn render_mcp_add_form(
     if let Some(fields_area) = fields_area {
         render_mcp_inline_fields(
             frame,
+            app,
             mcp,
             &fields,
             &rows_data,
@@ -273,6 +274,7 @@ fn mcp_preview_value(mcp: &super::form::McpAddFormState) -> Value {
 
 fn render_mcp_inline_fields(
     frame: &mut Frame<'_>,
+    app: &App,
     mcp: &super::form::McpAddFormState,
     fields: &[McpAddField],
     rows_data: &[(String, String)],
@@ -355,6 +357,16 @@ fn render_mcp_inline_fields(
         state.select(Some(selected_idx.min(fields.len() - 1)));
     }
     frame.render_stateful_widget(table, table_area, &mut state);
+    let offset = state.offset();
+    for idx in offset..row_heights.len() {
+        if let Some(rect) = form_row_rect(table_area, offset, &row_heights, idx) {
+            app.mouse_layout.borrow_mut().form_fields.push((
+                super::HitRect { rect },
+                FormFocus::Fields,
+                idx,
+            ));
+        }
+    }
     if let Some(cursor_x) = cursor_x {
         set_inline_table_cursor(
             frame,

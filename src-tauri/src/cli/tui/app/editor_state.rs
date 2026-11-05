@@ -314,6 +314,142 @@ impl EditorState {
         (subline, x)
     }
 
+    /// Maps a visual column within a wrapped fragment back to the byte offset
+    /// in `line` for the character whose left edge is at or just left of `x`.
+    /// Inverse of [`Self::wrapped_cursor_subline_and_x`] for ordinary (non
+    /// giant-line) input; `subline` selects the wrapped fragment and `x` the
+    /// display column inside it. The result is clamped to a `char` boundary.
+    fn byte_offset_for_subline_x(line: &str, width: u16, subline: usize, x: u16) -> usize {
+        let width = width.max(1) as usize;
+        let segments = Self::wrap_line_segments(line, width as u16);
+        if segments.is_empty() {
+            return 0;
+        }
+        let subline = subline.min(segments.len() - 1);
+        let seg_start: usize = segments[..subline].iter().map(String::len).sum();
+        let seg = &segments[subline];
+        // `x` is the 0-based display column; the cursor lands just before the
+        // character at that column (matching a click).
+        let x = (x as usize).min(width.saturating_sub(1));
+        let mut acc = 0usize;
+        for (byte, ch) in seg.char_indices() {
+            let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0).max(1);
+            if x < acc.saturating_add(ch_width) {
+                return seg_start + byte;
+            }
+            acc = acc.saturating_add(ch_width);
+        }
+        seg_start + seg.len()
+    }
+
+    /// Maps a visual click offset `(local_y, local_x)` relative to the editor's
+    /// viewport back to a `(physical_row, byte_offset)` cursor position, using
+    /// the same `(scroll, scroll_subline)` origin the frame rendered with.
+    pub(crate) fn cursor_for_visual_offset(
+        &self,
+        width: u16,
+        height: usize,
+        scroll: usize,
+        scroll_subline: usize,
+        local_y: usize,
+        local_x: u16,
+    ) -> (usize, usize) {
+        if self.lines.is_empty() || height == 0 {
+            return (0, 0);
+        }
+        let width = width.max(1);
+        let local_y = local_y.min(height.saturating_sub(1));
+        let mut remaining = local_y;
+        let mut row = scroll.min(self.lines.len() - 1);
+        while row < self.lines.len() {
+            let line = &self.lines[row];
+            let line_h = Self::wrapped_line_height(line, width);
+            let visible = if row == scroll {
+                line_h.saturating_sub(scroll_subline.min(line_h))
+            } else {
+                line_h
+            };
+            if remaining < visible {
+                let subline = if row == scroll {
+                    scroll_subline.min(line_h).saturating_add(remaining)
+                } else {
+                    remaining
+                };
+                let col = if Self::uses_bounded_line_window(line) {
+                    self.bounded_click_byte(line, local_x, width)
+                } else {
+                    Self::byte_offset_for_subline_x(line, width, subline, local_x)
+                };
+                return (row, col);
+            }
+            remaining = remaining.saturating_sub(visible);
+            row = row.saturating_add(1);
+        }
+        // Click below all text: clamp to the end of the last line.
+        let last = self.lines.len() - 1;
+        let line = &self.lines[last];
+        let col = if Self::uses_bounded_line_window(line) {
+            self.bounded_click_byte(line, width.saturating_sub(1), width)
+        } else {
+            let line_h = Self::wrapped_line_height(line, width);
+            Self::byte_offset_for_subline_x(line, width, line_h.saturating_sub(1), width.saturating_sub(1))
+        };
+        (last, col)
+    }
+
+    /// Byte offset for a click inside a giant (bounded-window) line. The
+    /// visible window is centered on the cursor, mirroring
+    /// [`Self::bounded_line_window`]; `x` is mapped within that window.
+    fn bounded_click_byte(&self, line: &str, x: u16, width: u16) -> usize {
+        let width = width.max(1) as usize;
+        let cursor = TextInput::clamp_byte_boundary(line, self.cursor_col);
+        let mut start = cursor;
+        let mut before_width = 0usize;
+        for (byte, ch) in line[..cursor].char_indices().rev() {
+            let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0).max(1);
+            if before_width.saturating_add(ch_width) > width.saturating_sub(1) {
+                break;
+            }
+            start = byte;
+            before_width = before_width.saturating_add(ch_width);
+        }
+        let x = (x as usize).min(width.saturating_sub(1));
+        let mut acc = 0usize;
+        for (byte, ch) in line[start..].char_indices() {
+            let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0).max(1);
+            if x < acc.saturating_add(ch_width) {
+                return start + byte;
+            }
+            acc = acc.saturating_add(ch_width);
+        }
+        start + line[start..].len()
+    }
+
+    /// Places the cursor at the visual offset `(local_y, local_x)` and re-fits
+    /// the viewport so it stays visible.
+    pub(crate) fn set_cursor_to(
+        &mut self,
+        width: u16,
+        height: usize,
+        scroll: usize,
+        scroll_subline: usize,
+        local_y: usize,
+        local_x: u16,
+    ) {
+        if self.lines.is_empty() {
+            self.lines.push(String::new());
+        }
+        let (row, col) =
+            self.cursor_for_visual_offset(width, height, scroll, scroll_subline, local_y, local_x);
+        self.cursor_row = row.min(self.lines.len() - 1);
+        self.cursor_col = self.clamped_cursor_byte(self.cursor_row, col);
+        let viewport = ratatui::layout::Size {
+            width: width.max(1),
+            height: (height as u16).max(1),
+        };
+        self.ensure_cursor_visible(viewport);
+    }
+
     #[cfg(test)]
     pub(crate) fn cursor_visual_offset_from_scroll(&self, width: u16) -> (usize, u16) {
         self.cursor_visual_offset_from_origin(width, self.scroll, self.scroll_subline)

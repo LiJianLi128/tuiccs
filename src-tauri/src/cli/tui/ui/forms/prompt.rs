@@ -50,7 +50,15 @@ pub(crate) fn render_prompt_meta_form(
         } else {
             chunks[1]
         };
-        render_prompt_inline_fields(frame, prompt, &fields, selected_idx, fields_area, theme);
+        render_prompt_inline_fields(
+            frame,
+            app,
+            prompt,
+            &fields,
+            selected_idx,
+            fields_area,
+            theme,
+        );
     }
     if split || matches!(prompt.focus, FormFocus::Content) {
         let content_area = if split {
@@ -64,6 +72,7 @@ pub(crate) fn render_prompt_meta_form(
 
 fn render_prompt_inline_fields(
     frame: &mut Frame<'_>,
+    app: &App,
     prompt: &super::form::PromptMetaFormState,
     fields: &[PromptMetaField],
     selected_idx: usize,
@@ -150,6 +159,16 @@ fn render_prompt_inline_fields(
         state.select(Some(selected_idx.min(fields.len() - 1)));
     }
     frame.render_stateful_widget(table, table_area, &mut state);
+    let offset = state.offset();
+    for idx in offset..row_heights.len() {
+        if let Some(rect) = form_row_rect(table_area, offset, &row_heights, idx) {
+            app.mouse_layout.borrow_mut().form_fields.push((
+                super::HitRect { rect },
+                FormFocus::Fields,
+                idx,
+            ));
+        }
+    }
     if let Some(cursor_x) = cursor_x {
         set_inline_table_cursor(
             frame,

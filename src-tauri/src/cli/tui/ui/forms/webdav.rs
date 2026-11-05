@@ -40,11 +40,12 @@ pub(crate) fn render_webdav_sync_form(
         ]
     };
     render_key_bar(frame, chunks[0], theme, &keys);
-    render_webdav_fields(frame, form, chunks[1], theme);
+    render_webdav_fields(frame, app, form, chunks[1], theme);
 }
 
 fn render_webdav_fields(
     frame: &mut Frame<'_>,
+    app: &App,
     form: &form::WebDavSyncFormState,
     area: Rect,
     theme: &theme::Theme,
@@ -114,6 +115,18 @@ fn render_webdav_fields(
     let mut state = TableState::default();
     state.select(Some(selected_idx));
     frame.render_stateful_widget(table, area, &mut state);
+    let offset = state.offset();
+    for idx in offset..row_heights.len() {
+        if let Some(rect) = form_row_rect(area, offset, &row_heights, idx) {
+            app.mouse_layout.borrow_mut().form_fields.push((
+                super::HitRect { rect },
+                // WebDAV has no `FormFocus`; the focus is ignored by
+                // `form_focus_field`, which addresses this form by index.
+                form::FormFocus::Fields,
+                idx,
+            ));
+        }
+    }
     if let Some(cursor_x) = cursor_x {
         set_inline_table_cursor(
             frame,

@@ -63,6 +63,22 @@ impl ListHitRegion {
     }
 }
 
+/// The editable text region of the full-screen editor, with enough geometry to
+/// map a terminal click back to a `(row, byte-offset)` cursor position.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct EditorHitRegion {
+    /// The inner text area (inside the border and key bar) the editor draws into.
+    pub field_inner: Rect,
+    /// Effective text width in terminal columns (`field_inner.width.max(1)`).
+    pub width: u16,
+    /// Effective text height in terminal rows.
+    pub height: usize,
+    /// First visible physical line (`EditorState::scroll`) used this frame.
+    pub scroll: usize,
+    /// Wrapped-subline offset within `scroll` (`EditorState::scroll_subline`).
+    pub scroll_subline: usize,
+}
+
 /// Everything the current frame recorded for mouse hit-testing.
 ///
 /// `RefCell` is used because the store lives on [`super::super::app::App`] and
@@ -80,10 +96,15 @@ pub(crate) struct MouseLayout {
     pub overlay_buttons: Vec<(HitRect, String)>,
     /// Header app-type tab chips, each paired with the app type it switches to.
     pub header_chips: Vec<(HitRect, AppType)>,
-    /// Editable form fields, each paired with the focus it activates.
-    pub form_fields: Vec<(HitRect, FormFocus)>,
+    /// Editable form fields, each paired with the focus it activates and the
+    /// absolute field index in that form's `fields()` list. The index lets a
+    /// click position `field_idx` even for S3/WebDAV forms, which are addressed
+    /// only by index (no `FormFocus`).
+    pub form_fields: Vec<(HitRect, FormFocus, usize)>,
     /// The filter input bar, when visible.
     pub filter_bar: Option<Rect>,
+    /// The full-screen editor's text region, when the editor is open.
+    pub editor_region: Option<EditorHitRegion>,
 }
 
 impl MouseLayout {
@@ -95,5 +116,6 @@ impl MouseLayout {
         self.header_chips.clear();
         self.form_fields.clear();
         self.filter_bar = None;
+        self.editor_region = None;
     }
 }

@@ -324,6 +324,22 @@ pub enum ProviderAddField {
     UsageQuery,
 }
 
+/// Whether a provider field row is a decorative divider (not focusable).
+///
+/// Shared so the renderer can skip recording a click region for dividers and
+/// the click handler can defensively skip them when positioning `field_idx`.
+pub(crate) fn provider_field_is_divider(field: ProviderAddField) -> bool {
+    matches!(
+        field,
+        ProviderAddField::TemplateDivider
+            | ProviderAddField::ClaudeAdvancedDivider
+            | ProviderAddField::CodexAdvancedDivider
+            | ProviderAddField::HermesAdvancedDivider
+            | ProviderAddField::CommonConfigDivider
+            | ProviderAddField::UsageQueryDivider
+    )
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderFormPage {
     Main,

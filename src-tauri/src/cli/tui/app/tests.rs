@@ -2781,6 +2781,171 @@ mod tests {
     }
 
     #[test]
+    fn editor_byte_offset_maps_display_column_on_a_single_wrapped_line() {
+        // "abc" on width 3 is a single fragment; clicking column c puts the
+        // cursor just before the character at that column.
+        let line = "abc";
+        for col in 0..=2 {
+            let byte = EditorState::byte_offset_for_subline_x(line, 3, 0, col);
+            assert_eq!(byte, col, "column {col} should map to byte {col}");
+        }
+        // Column past the line end clamps to the line end.
+        assert_eq!(EditorState::byte_offset_for_subline_x(line, 3, 0, 9), 3);
+    }
+
+    #[test]
+    fn editor_cursor_for_visual_offset_selects_the_clicked_physical_row() {
+        // width 3: line0 "abc" (1 row), line1 "defgh" -> ["def","gh"] (2 rows),
+        // line2 "ij" (1 row). Total visible rows = 4.
+        let editor = EditorState::new(
+            "Title",
+            EditorKind::Plain,
+            EditorSubmit::PromptCreate {
+                id: "demo".to_string(),
+                name: "Demo".to_string(),
+                description: None,
+            },
+            "abc\ndefgh\nij",
+        );
+        assert_eq!(editor.cursor_for_visual_offset(3, 4, 0, 0, 0, 1), (0, 1));
+        assert_eq!(editor.cursor_for_visual_offset(3, 4, 0, 0, 1, 1), (1, 1));
+        // Row 1, subline 1 ("gh"): clicking column 1 selects "h" (byte 4).
+        assert_eq!(editor.cursor_for_visual_offset(3, 4, 0, 0, 2, 1), (1, 4));
+        assert_eq!(editor.cursor_for_visual_offset(3, 4, 0, 0, 3, 1), (2, 1));
+        // Clicking below all text clamps to the last line's end.
+        assert_eq!(editor.cursor_for_visual_offset(3, 4, 0, 0, 99, 1), (2, 2));
+    }
+
+    #[test]
+    fn editor_set_cursor_to_positions_and_keeps_cursor_visible() {
+        let mut editor = EditorState::new(
+            "Title",
+            EditorKind::Plain,
+            EditorSubmit::PromptCreate {
+                id: "demo".to_string(),
+                name: "Demo".to_string(),
+                description: None,
+            },
+            "abc\ndefgh\nij",
+        );
+        editor.set_cursor_to(3, 4, 0, 0, 2, 1);
+        assert_eq!(editor.cursor_row, 1);
+        // Row 1 is wrapped at width 3; the click is on the second fragment.
+        assert_eq!(editor.cursor_col, 4);
+        // The cursor must be visible at the clicked visual row.
+        let (vy, _vx) =
+            editor.cursor_visual_offset_from_origin(3, editor.scroll, editor.scroll_subline);
+        assert_eq!(vy, 2);
+    }
+
+    #[test]
+    fn editor_set_cursor_to_on_empty_document_produces_one_line() {
+        let mut editor = EditorState::new(
+            "Title",
+            EditorKind::Plain,
+            EditorSubmit::PromptCreate {
+                id: "demo".to_string(),
+                name: "Demo".to_string(),
+                description: None,
+            },
+            "",
+        );
+        editor.set_cursor_to(3, 4, 0, 0, 0, 1);
+        assert_eq!(editor.lines.len(), 1);
+        assert_eq!(editor.cursor_row, 0);
+        assert_eq!(editor.cursor_col, 0);
+    }
+
+    #[test]
+    fn editor_cursor_for_visual_offset_does_not_panic_on_a_giant_line() {
+        let content = format!("{}TAIL", "x".repeat(1_000_000));
+        let editor = EditorState::new(
+            "Large line",
+            EditorKind::Plain,
+            EditorSubmit::PromptCreate {
+                id: "demo".to_string(),
+                name: "Demo".to_string(),
+                description: None,
+            },
+            &content,
+        );
+        let (scroll, subline) = editor.viewport_origin(Size {
+            width: 10,
+            height: 3,
+        });
+        // Clicking anywhere in the visible window must not panic and must stay
+        // within the bounded window.
+        let (row, col) = editor.cursor_for_visual_offset(10, 3, scroll, subline, 0, 4);
+        assert_eq!(row, 0);
+        assert!(col <= content.len());
+    }
+
+    #[test]
+    fn mouse_layout_reset_clears_editor_and_form_regions() {
+        use crate::cli::tui::ui::mouse::{EditorHitRegion, HitRect, MouseLayout};
+        let mut layout = MouseLayout::default();
+        layout.editor_region = Some(EditorHitRegion {
+            field_inner: ratatui::layout::Rect::new(0, 0, 10, 5),
+            width: 10,
+            height: 5,
+            scroll: 0,
+            scroll_subline: 0,
+        });
+        layout.form_fields.push((
+            HitRect {
+                rect: ratatui::layout::Rect::new(0, 0, 1, 1),
+            },
+            crate::cli::tui::form::FormFocus::Fields,
+            0,
+        ));
+        layout.reset();
+        assert!(layout.editor_region.is_none());
+        assert!(layout.form_fields.is_empty());
+    }
+
+    #[test]
+    fn form_focus_field_positions_the_clicked_index() {
+        // MCP has no divider rows, so an arbitrary index is always a valid
+        // focusable field and must be applied verbatim.
+        let mut app = App::new(Some(AppType::Claude));
+        app.form = Some(FormState::McpAdd(McpAddFormState::new()));
+        app.form_focus_field(FormFocus::Fields, 1);
+        let Some(FormState::McpAdd(mcp)) = app.form.as_ref() else {
+            panic!("expected MCP form");
+        };
+        assert_eq!(mcp.focus, FormFocus::Fields);
+        assert_eq!(mcp.field_idx, 1);
+    }
+
+    #[test]
+    fn form_focus_field_positions_s3_index_without_form_focus() {
+        // S3/WebDAV forms are addressed only by `field_idx`; a click must set
+        // the index rather than fall through the previous `other => other` arm.
+        let mut app = App::new(Some(AppType::Claude));
+        app.form = Some(FormState::S3Sync(
+            crate::cli::tui::form::S3SyncFormState::from_settings(None),
+        ));
+        app.form_focus_field(FormFocus::Fields, 2);
+        let Some(FormState::S3Sync(form)) = app.form.as_ref() else {
+            panic!("expected S3 form");
+        };
+        assert_eq!(form.field_idx, 2);
+    }
+
+    #[test]
+    fn form_focus_field_clamps_index_to_field_count() {
+        let mut app = App::new(Some(AppType::Claude));
+        app.form = Some(FormState::ProviderAdd(ProviderAddFormState::new(
+            AppType::Claude,
+        )));
+        app.form_focus_field(FormFocus::Fields, 99_999);
+        let Some(FormState::ProviderAdd(provider)) = app.form.as_ref() else {
+            panic!("expected provider form");
+        };
+        assert_eq!(provider.field_idx, provider.fields().len() - 1);
+    }
+
+    #[test]
     fn tab_key_is_noop() {
         let mut app = App::new(Some(AppType::Claude));
         app.route = Route::Providers;

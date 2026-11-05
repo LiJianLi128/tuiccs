@@ -71,6 +71,14 @@ pub(super) fn render_editor(
 
     frame.render_widget(Paragraph::new(shown), field_inner);
 
+    app.mouse_layout.borrow_mut().editor_region = Some(super::EditorHitRegion {
+        field_inner,
+        width,
+        height,
+        scroll,
+        scroll_subline,
+    });
+
     let (row_in_view, col_in_view) =
         editor.cursor_visual_offset_from_origin(width, scroll, scroll_subline);
     if row_in_view < height {

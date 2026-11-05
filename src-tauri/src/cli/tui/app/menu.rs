@@ -956,14 +956,34 @@ impl App {
         if self.overlay.is_active() {
             return self.on_overlay_mouse_click(column, row, data);
         }
+        // The full-screen editor consumes every click; clicks inside the text
+        // area reposition the cursor, clicks elsewhere (key bar, borders) do
+        // nothing.
         if self.editor.is_some() {
+            let region = self.mouse_layout.borrow().editor_region;
+            if let Some(region) = region {
+                if region.field_inner.contains(ratatui::layout::Position::new(column, row)) {
+                    let local_y = (row - region.field_inner.y) as usize;
+                    let local_x = column - region.field_inner.x;
+                    if let Some(editor) = self.editor.as_mut() {
+                        editor.set_cursor_to(
+                            region.width,
+                            region.height,
+                            region.scroll,
+                            region.scroll_subline,
+                            local_y,
+                            local_x,
+                        );
+                    }
+                }
+            }
             return Action::None;
         }
         if self.form.is_some() {
             let fields = self.mouse_layout.borrow().form_fields.clone();
-            for (rect, focus) in fields {
+            for (rect, focus, field_idx) in fields {
                 if rect.contains(column, row) {
-                    self.form_focus_field(focus);
+                    self.form_focus_field(focus, field_idx);
                     return Action::None;
                 }
             }
@@ -1093,25 +1113,49 @@ impl App {
         }
     }
 
-    fn form_focus_field(&mut self, focus: crate::cli::tui::form::FormFocus) {
-        use crate::cli::tui::form::FormState;
+    fn form_focus_field(&mut self, focus: crate::cli::tui::form::FormFocus, field_idx: usize) {
+        use crate::cli::tui::form::{FormState, provider_field_is_divider};
         self.form = self.form.take().map(|form| match form {
             FormState::ProviderAdd(mut f) => {
                 f.focus = focus;
+                let n = f.fields().len();
+                f.field_idx = field_idx.min(n.saturating_sub(1));
+                // Defensively skip a divider (clicks never record one, but a
+                // stale index could land here after a dynamic field list).
+                if n > 1 && provider_field_is_divider(f.fields()[f.field_idx]) {
+                    if f.field_idx < n - 1 {
+                        f.field_idx += 1;
+                    } else {
+                        f.field_idx = f.field_idx.saturating_sub(1);
+                    }
+                }
                 FormState::ProviderAdd(f)
             }
             FormState::McpAdd(mut f) => {
                 f.focus = focus;
+                let n = f.fields().len();
+                f.field_idx = field_idx.min(n.saturating_sub(1));
                 FormState::McpAdd(f)
             }
             FormState::PromptMeta(mut f) => {
                 f.focus = focus;
+                let n = f.fields().len();
+                f.field_idx = field_idx.min(n.saturating_sub(1));
                 FormState::PromptMeta(f)
             }
-            // S3/WebDAV sync forms are a single field list addressed by
-            // `field_idx` (not a `FormFocus`), so a focus click keeps the
-            // current field. The form renderers do not record `form_fields`
-            // for these yet, so this arm is not exercised in practice.
+            // S3/WebDAV sync forms are a single field list addressed only by
+            // `field_idx` (no `FormFocus`), so a click positions the index
+            // directly; `focus` is ignored for these.
+            FormState::S3Sync(mut f) => {
+                let n = f.fields().len();
+                f.field_idx = field_idx.min(n.saturating_sub(1));
+                FormState::S3Sync(f)
+            }
+            FormState::WebDavSync(mut f) => {
+                let n = f.fields().len();
+                f.field_idx = field_idx.min(n.saturating_sub(1));
+                FormState::WebDavSync(f)
+            }
             other => other,
         });
     }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::cli::tui::form::provider_field_is_divider;
 use serde_json::json;
 use std::collections::BTreeSet;
 
@@ -520,6 +521,7 @@ pub(crate) fn render_provider_add_form(
     if let Some(fields_area) = fields_area {
         render_provider_inline_fields(
             frame,
+            app,
             provider,
             &fields,
             &rows_data,
@@ -535,6 +537,7 @@ pub(crate) fn render_provider_add_form(
 
 fn render_provider_inline_fields(
     frame: &mut Frame<'_>,
+    app: &App,
     provider: &super::form::ProviderAddFormState,
     fields: &[ProviderAddField],
     rows_data: &[(String, String)],
@@ -654,6 +657,20 @@ fn render_provider_inline_fields(
         state.select(Some(selected_idx.min(fields.len() - 1)));
     }
     frame.render_stateful_widget(table, table_area, &mut state);
+    let offset = state.offset();
+    for idx in offset..row_heights.len() {
+        // Divider rows are decorative and not focusable.
+        if fields.get(idx).is_some_and(|field| provider_field_is_divider(*field)) {
+            continue;
+        }
+        if let Some(rect) = form_row_rect(table_area, offset, &row_heights, idx) {
+            app.mouse_layout.borrow_mut().form_fields.push((
+                super::HitRect { rect },
+                FormFocus::Fields,
+                idx,
+            ));
+        }
+    }
     if let Some(cursor_x) = cursor_x {
         set_inline_table_cursor(
             frame,
@@ -2270,16 +2287,4 @@ pub(crate) fn codex_local_routing_field_label_and_value(
     };
 
     (label, value)
-}
-
-fn provider_field_is_divider(field: ProviderAddField) -> bool {
-    matches!(
-        field,
-        ProviderAddField::TemplateDivider
-            | ProviderAddField::ClaudeAdvancedDivider
-            | ProviderAddField::CodexAdvancedDivider
-            | ProviderAddField::HermesAdvancedDivider
-            | ProviderAddField::CommonConfigDivider
-            | ProviderAddField::UsageQueryDivider
-    )
 }
