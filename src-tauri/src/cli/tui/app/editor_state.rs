@@ -334,8 +334,9 @@ impl EditorState {
         let seg_start: usize = segments[..subline].iter().map(String::len).sum();
         let seg = &segments[subline];
         // `x` is the 0-based display column; the cursor lands just before the
-        // character at that column (matching a click).
-        let x = (x as usize).min(width.saturating_sub(1));
+        // character at that column (matching a click). When `x` reaches past the
+        // last character the loop falls through and the line end is returned.
+        let x = x as usize;
         let mut acc = 0usize;
         for (byte, ch) in seg.char_indices() {
             let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0).max(1);
@@ -363,7 +364,6 @@ impl EditorState {
             return (0, 0);
         }
         let width = width.max(1);
-        let local_y = local_y.min(height.saturating_sub(1));
         let mut remaining = local_y;
         let mut row = scroll.min(self.lines.len() - 1);
         while row < self.lines.len() {
