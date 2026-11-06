@@ -41,7 +41,7 @@ mod forms;
 mod home_chart;
 mod main_page;
 mod mcp;
-mod mouse;
+pub(crate) mod mouse;
 mod overlay;
 mod pricing;
 mod prompts;

@@ -319,7 +319,12 @@ impl EditorState {
     /// Inverse of [`Self::wrapped_cursor_subline_and_x`] for ordinary (non
     /// giant-line) input; `subline` selects the wrapped fragment and `x` the
     /// display column inside it. The result is clamped to a `char` boundary.
-    fn byte_offset_for_subline_x(line: &str, width: u16, subline: usize, x: u16) -> usize {
+    pub(crate) fn byte_offset_for_subline_x(
+        line: &str,
+        width: u16,
+        subline: usize,
+        x: u16,
+    ) -> usize {
         let width = width.max(1) as usize;
         let segments = Self::wrap_line_segments(line, width as u16);
         if segments.is_empty() {

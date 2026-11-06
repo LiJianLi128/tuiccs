@@ -1116,7 +1116,11 @@ impl App {
         }
     }
 
-    fn form_focus_field(&mut self, focus: crate::cli::tui::form::FormFocus, field_idx: usize) {
+    pub(crate) fn form_focus_field(
+        &mut self,
+        focus: crate::cli::tui::form::FormFocus,
+        field_idx: usize,
+    ) {
         use crate::cli::tui::form::{provider_field_is_divider, FormState};
         self.form = self.form.take().map(|form| match form {
             FormState::ProviderAdd(mut f) => {
@@ -1159,7 +1163,6 @@ impl App {
                 f.field_idx = field_idx.min(n.saturating_sub(1));
                 FormState::WebDavSync(f)
             }
-            other => other,
         });
     }
 
